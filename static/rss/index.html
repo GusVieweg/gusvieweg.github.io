@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title><![CDATA[Gus Vieweg's Tech Blog]]></title><description><![CDATA[Things I've learned and want to remember, technically.]]></description><link>https://gusvieweg.github.io/</link><image><url>https://gusvieweg.github.io/favicon.png</url><title>Gus Vieweg&apos;s Tech Blog</title><link>https://gusvieweg.github.io/</link></image><generator>Ghost 5.16</generator><lastBuildDate>Fri, 23 Sep 2022 16:26:29 GMT</lastBuildDate><atom:link href="https://gusvieweg.github.io/rss/" rel="self" type="application/rss+xml"/><ttl>60</ttl><item><title><![CDATA[How to Install the Progress OpenEdge 12.0 ODBC Driver on a CentOS Server]]></title><description><![CDATA[To connect to our Progress-based database, I was previously using a .jar file in a spoofed Java Runtime Environment. Now I see the error of my ways!]]></description><link>https://gusvieweg.github.io/install-progress-openedge-12-0-odbc-driver-on-centos/</link><guid isPermaLink="false">632dd8773b84928a01e1a760</guid><category><![CDATA[DevOps]]></category><category><![CDATA[Programming]]></category><dc:creator><![CDATA[Gus Vieweg]]></dc:creator><pubDate>Fri, 23 Sep 2022 16:04:50 GMT</pubDate><media:content url="https://images.unsplash.com/photo-1516862523118-a3724eb136d7?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=MnwxMTc3M3wwfDF8c2VhcmNofDJ8fGRyaXZlcnxlbnwwfHx8fDE2NjM5NTAwMjc&amp;ixlib=rb-1.2.1&amp;q=80&amp;w=2000" medium="image"/><content:encoded><![CDATA[<img src="https://images.unsplash.com/photo-1516862523118-a3724eb136d7?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=MnwxMTc3M3wwfDF8c2VhcmNofDJ8fGRyaXZlcnxlbnwwfHx8fDE2NjM5NTAwMjc&amp;ixlib=rb-1.2.1&amp;q=80&amp;w=2000" alt="How to Install the Progress OpenEdge 12.0 ODBC Driver on a CentOS Server"><p>I&#x2019;m writing this because I could not find a succinct guide on how to install the Progress OpenEdge 12.0 ODBC Driver on a CentOS server.</p><h3 id="context">Context</h3><p>To connect to our Progress-based database, I was previously using a <code>.jar</code> file in a spoofed Java Runtime Environment. Python packages used included <code>jaydebeapi</code> and <code>jPype1</code>. The configuration was confusing and isolated other developers on the team. Once Oracle started auditing our company to track Java usage based on IP address, we determined it was time to evaluate other methodologies of connecting to our Progress database. Installing a driver on our CentOS server was our best bet.</p><p>I imagine at least one other developer somewhere in the world will appreciate this guide. If you are that developer, hello and welcome. I hope this serves you well.</p><p>Let&#x2019;s begin!</p><hr><h1 id="1-openedge-configuration">1. OpenEdge Configuration</h1><p>I was fortunate enough to stumble upon <a href="https://blog.zedfox.us/installing-openedge-sql-client-access-odbc-drivers-ubuntu/">this blog post</a> on installing OpenEdge SQL Client Access on a Ubuntu machine.</p><p>Follow the above blog post until you reach the section &#x201C;Confirm correctness of OpenEdge ODBC drivers.&#x201D;</p><p>The blog will instruct you to confirm success by using the command:</p><pre><code># in your terminal
+cd /usr/dlc/odbc/lib/
+ldd pgoe27.so
+</code></pre><p>The output will be the same as in the blog post. <strong><strong>You will be missing libpgicu27.so (not found).</strong></strong></p><p>The blog post&#x2019;s solution is for Ubuntu machines. To configure <code>libpgicu27.so</code> in CentOS, run the following from the directory you are in (<code>/usr/dlc/odbc/lib</code>):</p><pre><code># in your terminal
+sudo cp libpgicu27.so /lib64
+ldd pgoe27.so
+</code></pre><p>The <code>libpgicu27.so</code> file should now be linked to the copy you made above. Nice!</p><hr><h1 id="2-bashrc-configuration">2. <code>~/.bashrc</code> Configuration</h1><p>Now that we&#x2019;ve successfully installed the driver and all files point to where they are supposed to, we need to make sure <code>pyodbc</code> and other ODBC libraries can find it.</p><p>I have distilled what I&#x2019;ve learned from Progress&#x2019;s documentation into the following steps:</p><ol><li>We need to add some global <code>export</code> environment variables to our <code>~/.bashrc</code> file. Add the following to your <code>~/.bashrc</code> or similar configuration file.</li></ol><pre><code># ~/.bashrc
+export ODBCINI=&quot;/etc/odbc.ini&quot;
+export ODBCINST=&quot;/etc/odbcinst.ini&quot;
+</code></pre><p>This next one is a bit different, as it is appending rather than declaring.</p><p>Run:</p><pre><code># in your terminal
+echo $LD_LIBRARY_PATH
+</code></pre><p>Take its output (in my case, it was <code>/usr/local/lib</code>) and append <code>:/usr/dlc/odbc:/usr/dlc/odbc/lib</code>. Save that string as <code>LD_LIBRARY_PATH</code> in your <code>~/.bashrc</code> file:</p><pre><code># ~/.bashrc
+export LD_LIBRARY_PATH=&quot;/usr/local/lib:/usr/dlc/odbc:/usr/dlc/odbc/lib&quot;
+</code></pre><p>Save your <code>~/.bashrc</code> file and, from your terminal, run:</p><pre><code># in your terminal
+source ~/.bashrc
+</code></pre><p>Your changes to <code>~/.bashrc</code> are now applied. Nice!</p><hr><h1 id="3-odbc-file-configuration">3. ODBC File Configuration</h1><p>ODBC File Configuration depends on whether you create a Data Source Name (DSN) or use an instanced ODBC configuration for your drivers.</p><p>To be more efficient (and because I couldn&#x2019;t understand Progress&#x2019;s instanced ODBC docs), we can use a Data Source Name (DSN) in our <code>/etc/odbc.ini</code> to hold some of these variables for us.</p><p><strong><strong>3a. Data Source Name Configuration</strong></strong></p><p>Open your <code>/etc/odbc.ini</code> file and append the below configuration. Note that you will need to supply variables where I have put <code>YOUR_*</code> placeholders.</p><pre><code># /etc/odbc.ini
+[ODBC Data Sources]
+ProgressOpenEdge=DataDirect 7.1 Progress OpenEdge Wire Protocol
+
+[ProgressOpenEdge]
+Driver=/usr/dlc/odbc/lib/pgoe27.so
+Description=DataDirect 7.1 Progress OpenEdge Wire Protocol
+AllowedOpenSSLVersions=1.1.1,1.0.2
+AlternateServers=
+ArraySize=
+ConnectionRetryCount=0
+ConnectionRetryDelay=3
+CryptoLibName=
+CryptoProtocolVersion=TLSv1.2, TLSv1.1, TLSv1,SSLv3
+Database=YOUR_DATABASE
+DefaultIsolationLevel=1
+EnableTimestampWithTimezone=1
+Encryption Method=0
+FailoverGranularity=0
+FailoverMode=0
+FailoverPreconnect=0
+HostName=YOUR_HOSTNAME
+HostNameInCertificate=
+KeepAlive=0
+LoadBalancing=0
+LoginTimeout=15
+PortNumber=YOUR_PORT_NUMBER
+QueryTimeout=0
+SSLLibName=
+TrustStore=
+TrustStorePassword=
+UseWideCharacterTypes=0
+ValidateServerCertificate=1
+
+[ODBC File DSN]
+DefaultDSNDir=
+
+[ODBC]
+IANAAppCodePage=4
+InstallDir=/usr/dlc/odbc/
+Trace=0
+TraceFile=odbctrace.out
+TraceDll=/usr/dlc/odbc/lib/pgoe27.so
+ODBCTraceMaxFileSize=102400
+ODBCTraceMaxNumFiles=10
+</code></pre><p>The fields <code>Database</code>, <code>HostName</code>, and <code>PortNumber</code> will be based on your Progress database&#x2019;s configuration. You may also need to adjust other variables depending on other database factors. The above is what worked for me.</p><p>Here are the following fields I amended:</p><ul><li>Under <code>[ODBC Data Sources]</code></li><li>Added <code>ProgressOpenEdge=DataDirect 7.1 Progress OpenEdge Wire Protocol</code> based on <a href="https://docs.progress.com/bundle/datadirect-connect-odbc-71/page/Sample-Default-odbc.ini-File.html">Progress&#x2019;s example odbc.ini</a></li><li>Under <code>[Progress OpenEdge]</code></li><li>Amended <code>Driver</code> to <code>/usr/dlc/odbc/lib/pgoe27.so</code> (our installation file from Step 1).</li><li>Amended the fields <code>Database</code>, <code>HostName</code>, and <code>PortNumber</code> to placeholders you will change.</li><li>Under <code>[ODBC]</code></li><li>Amended <code>InstallDir</code> to <code>/usr/dlc/odbc/</code> (our parent installation directory from Step 1 - see Progress&#x2019;s <a href="https://docs.progress.com/bundle/datadirect-connect-odbc-71/page/Configuration-Through-the-System-Information-odbc.ini-File.html#Configuration-Through-the-System-Information-odbc.ini-File">Configuring Through The System Information (odbc.ini) File</a></li><li>Amended <code>TraceDll</code> to <code>/usr/dlc/odbc/lib/pgoe27.so</code> (our installation file from Step 1).</li><li>NOTE. I lucked out on <code>IANAAppCodePage=4</code> (the default). There&#x2019;s a <a href="https://docs.progress.com/bundle/datadirect-odbc-reference/page/IANAAppCodePage-values.html">IANAAppCodePages mapping table</a> on Progress&#x2019;s site, but I couldn&#x2019;t easily deduce the code page of my database. Fortunately, my friends at Zedfox added their code page of their Progress database in their <a href="https://blog.zedfox.us/installing-openedge-sql-client-access-odbc-drivers-ubuntu/">&#x201C;Testing OpenEdge ODBC connection&#x201D; section</a>, on line 12 of their Test.php script. Thanks fellas!</li></ul><p>You&#x2019;re successfully altered the Data Source Name (DSN) configuration. Nice! Skip to Step 4.</p><hr><h1 id="4-testing-the-connection">4. Testing the Connection</h1><p>Navigate to your main Python directory and boot up a Python shell. For me, I use:</p><pre><code># in your terminal
+pipenv run python
+</code></pre><p>Run the following Python commands in that shell:</p><pre><code># in a python shell
+import os
+os.getenv(&quot;ODBCINI&quot;)         # If you don&apos;t get /etc/odbc.ini, go back to Step 2
+os.getenv(&quot;ODBCINST&quot;)        # If you don&apos;t get /etc/odbcisnt.ini, go back to Step 2
+os.getenv(&quot;LD_LIBRARY_PATH&quot;) # If you don&apos;t get &lt;INITIAL LD_LIBRARY_PATH value&gt;:/usr/dlc/odbc:/usr/dlc/odbc/lib, go back to Step 2
+
+import pyodbc
+pyodbc.dataSources()
+{&apos;ProgressOpenEdge&apos;: &apos;/usr/dlc/odbc/lib/pgoe27.so&apos;, ...} 
+# If you don&apos;t see &apos;ProgressOpenEdge&apos; mapping to
+# &apos;/usr/dlc/odbc/lib/pgoe27.so&apos;, return to Step 3a/b and double-check your configuration settings.
+
+pyodbc.connect(&quot;DSN=ProgressOpenEdge;uid=YOUR_USERNAME;pwd=YOUR_PASSWORD&quot;)
+</code></pre><p>You should be greeted with a <code>&lt;pyodbc.Connection object&gt;</code>. If you are, you have successfully installed the Progress OpenEdge 12.0 Driver on CentOS! Nice!</p>]]></content:encoded></item></channel></rss>
